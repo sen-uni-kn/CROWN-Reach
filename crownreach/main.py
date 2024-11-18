@@ -2,7 +2,7 @@ import subprocess
 import os
 import sys
 import signal
-from .attack import run_attack_simulation
+from .attack import attack
 
 
 def check_ready_signal(server_process):
@@ -63,9 +63,10 @@ def kill_process_on_port(port):
 
 def verify(config_path: str, port: int = 5000, test_mode: bool = False):
     # ------------------- run attack -------------------- #
-    attack_result = run_attack_simulation(config_path)
+    attack_result, trajectory = attack(config_path)
     if attack_result:
         print("Falsified.")
+        return False, trajectory
     else:
         print("Attack results unknown, start verifying.")
 

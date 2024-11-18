@@ -32,3 +32,5 @@ output_c_shape: [-1, 2]
 output_scale: 1
 output_offset: 0
 bound_opts: {activation_bound_option: "same-slope"}
+plot_vars: ["th1", "th2"]
+plot_name: "double_pendulum_more_robust"

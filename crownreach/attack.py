@@ -27,10 +27,10 @@ def get_dtype_from_onnx_model(session):
     return torch.float32
 
 
-def run_attack_simulation(config_path):
+def attack(config_path):
     config = load_config(config_path)
     if not config["run_attack"]:
-        return ""
+        return None, None
 
     ort_session = ort.InferenceSession(
         config["model_dir"], providers=["CUDAExecutionProvider"]
@@ -119,11 +119,11 @@ def run_attack_simulation(config_path):
         if not evaluate_constraints(trajectory, config["constraints_safe"]):
             falsified = True
 
-    return falsified
+    return falsified, trajectory
 
 
 if __name__ == "__main__":
     try:
-        run_attack_simulation("configs/attitude_control.yaml")
+        attack("configs/attitude_control.yaml")
     except Exception as e:
         print("results unknown, please use verifier.")
