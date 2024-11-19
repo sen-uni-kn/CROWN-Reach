@@ -1,4 +1,4 @@
-run_attack: False
+run_attack: True
 num_vars: 7
 num_nn_input: 4
 num_nn_output: 2
@@ -9,13 +9,14 @@ ode_order: 4
 cut_off_threshold: 1e-6
 remainder_estimation: [-0.01, 0.01]
 initial_set:
-  - {name: "th1", interval: [1.3, 1.3]}
-  - {name: "th2", interval: [1.3, 1.3]}
-  - {name: "u1", interval: [1.3, 1.3]}
-  - {name: "u2", interval: [1.3, 1.3]}
-  - {name: "t", interval: [0, 0]}
-  - {name: "T1", interval: [0, 0]}
-  - {name: "T2", interval: [0, 0]}
+  - {name: "th1", interval: [1.0, 1.3], splits: 4}
+  - {name: "th2", interval: [1.0, 1.3], splits: 4}
+  - {name: "u1", interval: [1.0, 1.3], splits: 0}
+  - {name: "u2", interval: [1.0, 1.3], splits: 0}
+  - {name: "t", interval: [0, 0], splits: 0}
+  - {name: "T1", interval: [0, 0], splits: 0}
+  - {name: "T2", interval: [0, 0], splits: 0}
+split_vars: ["th1", "th2"]
 dynamics_expressions:
   - "u1"
   - "u2"

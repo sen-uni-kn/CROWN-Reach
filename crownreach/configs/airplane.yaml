@@ -1,4 +1,4 @@
-run_attack: False
+run_attack: True
 num_vars: 19
 num_nn_input: 12
 num_nn_output: 6
