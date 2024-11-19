@@ -31,6 +31,21 @@ from tinyrpc.server.gevent import RPCServerGreenlets
 from tinyrpc.dispatch import RPCDispatcher
 
 
+def resolve_resource(resource_path, config_file=None):
+    # Resolve the model path
+    here_dir = os.path.dirname(os.path.realpath(__file__))
+    base_dirs = [".", "./resources", here_dir, f"{here_dir}/.."]
+    if config_file is not None:
+        config_dir = os.path.dirname(config_file)
+        base_dirs.insert(0, config_dir)
+    for base_dir in base_dirs:
+        path = os.path.join(base_dir, resource_path)
+        if os.path.exists(path):
+            return path
+    else:
+        raise FileNotFoundError(f"Resource file {resource_path} not found")
+
+
 if __name__ == "__main__":
     config_file = sys.argv[1]
     with open(config_file, "r") as f:
@@ -50,24 +65,12 @@ if __name__ == "__main__":
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
 
-    model_path = config["model_dir"]
+    model_path = resolve_resource(config["model_dir"], config_file)
     input_shape = tuple(config["input_shape"])
     output_T_shape = tuple(config["output_T_shape"])
     output_c_shape = tuple(config["output_c_shape"])
     output_scale = config["output_scale"]
     output_offset = config["output_offset"]
-
-    # Resolve the model path
-    here_dir = os.path.dirname(os.path.realpath(__file__))
-    config_dir = os.path.dirname(config_file)
-    model_dirs = [config_dir, ".", "./resources", here_dir, f"{here_dir}/.."]
-    for model_dir in model_dirs:
-        model_path_ = os.path.join(model_dir, model_path)
-        if os.path.exists(model_path_):
-            model_path = model_path_
-            break
-    else:
-        raise FileNotFoundError(f"Model file {model_path} not found.")
 
     onnx_model = onnx.load(model_path)
     model_ori = onnx2pytorch.ConvertModel(onnx_model)
