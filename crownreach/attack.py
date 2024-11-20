@@ -1,4 +1,5 @@
 from typing import Callable
+from warnings import warn
 
 import torch
 import onnxruntime as ort
@@ -83,7 +84,25 @@ def simulate(controller, dynamics, initial_conditions: torch.Tensor, config: dic
     total_time = config["steps"] * config["step_size"]
     times = torch.linspace(0, total_time, steps=int(config["steps"]))
     initial_conditions = torch.atleast_2d(initial_conditions)
-    trajectory = odeint(dy, initial_conditions, times)
+
+    if "ode_order" not in config:
+        method = "rk4"
+    elif config["ode_order"] == 4:
+        method = "rk4"
+    elif config["ode_order"] == 1:
+        method = "euler"
+    else:
+        warn("Unsupported ode order for simulation: {config['ode_order']}. Using RK4.")
+        method = "rk4"
+
+    if "ode_step_size" in config:
+        ode_config = {"step_size": None}
+    else:
+        ode_config = {"step_size": config["ode_step_size"]}
+
+    trajectory = odeint(
+        dy, initial_conditions, times, method=method, options=ode_config
+    )
     return trajectory.permute(1, 0, 2)  # (batch, time, state)
 
 
@@ -92,15 +111,52 @@ def evaluate_constraints(trajectory, constraints, config):
     is_sat = torch.empty(*trajectory.shape[:2], len(constraints), dtype=torch.bool)
     for c, constraint in enumerate(constraints):
         check_expr = compile(constraint.replace("^", "**"), "<string>", "eval")
-        for t in range(trajectory.shape[1]):
-            locals_dict = {
-                config["initial_set"][i]["name"]: trajectory[:, t, i]
-                for i in range(trajectory.shape[2])
-            }
-            vals = eval(check_expr, {"__builtins__": {}}, locals_dict)
-            values[:, t, c] = vals
-            is_sat[:, t, c] = torch.le(vals, 0)
+        locals_dict = {
+            config["initial_set"][i]["name"]: trajectory[:, :, i]
+            for i in range(trajectory.shape[2])
+        }
+        vals = eval(check_expr, {"__builtins__": {}}, locals_dict)
+        values[:, :, c] = vals
+        is_sat[:, :, c] = torch.le(vals, 0)
     return is_sat, values
+
+
+def evaluate_target_constraints(trajectory, config):
+    """Evaluates the target constraints in config."""
+    if "constraints_target" in config:
+        is_sat, val = evaluate_constraints(
+            trajectory[:, -1:], config["constraints_target"], config
+        )
+        # squeeze the time dimension
+        return is_sat.squeeze(dim=1), val.squeeze(dim=1)
+    else:
+        return None, None
+
+
+def evaluate_unsafety_constraints(trajectory, config):
+    """Evaluates the unsafety constraints in config.
+
+    The returned boolean satisfaction tensor indicates whether the states
+    not satisfy the unsafety constraints.
+    """
+    raise NotImplementedError(
+        "Falsifying unsafety constraints is currently unsupported."
+    )
+    # if "constraints_unsafe" in config:
+    #     is_sat, val = evaluate_constraints(
+    #         trajectory, config["constraints_unsafe"], config
+    #     )
+    #     return val > 0, -val
+    # else:
+    #     return None, None
+
+
+def evaluate_safety_constraints(trajectory, config):
+    """Evaluates the safety constraints in config."""
+    if "constraints_safe" in config:
+        return evaluate_constraints(trajectory, config["constraints_safe"], config)
+    else:
+        return None, None
 
 
 def check(trajectory, config):
@@ -109,27 +165,21 @@ def check(trajectory, config):
     Returns a boolean satisfaction vector and a satisfaction value tensor.
     """
     result = torch.full(trajectory.shape[:1], True, dtype=torch.bool)
-    value = torch.full(trajectory.shape[:1], torch.inf)
+    value = torch.full(trajectory.shape[:1], -torch.inf)
     if "constraints_target" in config:
-        is_sat, val = evaluate_constraints(
-            trajectory[-1:], config["constraints_target"], config
-        )
+        is_sat, val = evaluate_target_constraints(trajectory, config)
         result = result & is_sat.all(dim=(1, 2))
-        value = torch.minimum(value, val.amin(dim=-1).amin(dim=-1))
+        value = torch.maximum(value, val.amax(dim=-1).amax(dim=-1))
 
     if "constraints_unsafe" in config:
-        is_sat, val = evaluate_constraints(
-            trajectory, config["constraints_unsafe"], config
-        )
-        result = result & ~is_sat.all(dim=(1, 2))
-        value = torch.minimum(value, -val.amax(dim=-1).amax(dim=-1))
+        is_sat, val = evaluate_unsafety_constraints(trajectory, config)
+        result = result & is_sat.all(dim=(1, 2))
+        value = torch.maximum(value, val.amax(dim=-1).amax(dim=-1))
 
     if "constraints_safe" in config:
-        is_sat, val = evaluate_constraints(
-            trajectory, config["constraints_safe"], config
-        )
+        is_sat, val = evaluate_safety_constraints(trajectory, config)
         result = result & is_sat.all(dim=(1, 2))
-        value = torch.minimum(value, val.amin(dim=-1).amin(dim=-1))
+        value = torch.maximum(value, val.amax(dim=-1).amax(dim=-1))
     return result, value
 
 
