@@ -4,11 +4,10 @@ from warnings import warn
 import torch
 import onnxruntime as ort
 import numpy as np
-import math
 import yaml
 from torchdiffeq import odeint
 
-from .crown import resolve_resource
+from crownreach.crown import resolve_resource
 
 ort.set_default_logger_severity(4)
 
@@ -57,7 +56,7 @@ def simulate(controller, dynamics, initial_conditions: torch.Tensor, config: dic
             config["initial_set"][i]["name"]: y[:, i] for i in range(y.shape[1])
         }
 
-        control_outputs = controller(y)
+        control_outputs = controller(y[:, : config["num_nn_input"]])
         control_outputs = control_outputs.expand(-1, config["num_nn_output"])
         adjusted_control_outputs = (
             control_outputs * config["output_scale"] + config["output_offset"]

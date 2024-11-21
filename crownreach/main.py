@@ -2,7 +2,7 @@ import subprocess
 import os
 import sys
 import signal
-from .attack import attack
+from crownreach.attack import attack
 
 
 def check_ready_signal(server_process):
@@ -27,6 +27,7 @@ def run_crownreach(config_path, test_mode=False, here_dir="."):
     cmd = [f"{here_dir}/CrownSettings", config_path]
     if test_mode:
         cmd.append("--test")
+    status = None
     with subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1
     ) as proc:
@@ -37,16 +38,31 @@ def run_crownreach(config_path, test_mode=False, here_dir="."):
                 if output == "":
                     if proc.poll() is not None:
                         break
+
+                output = output.strip()
+                as_status_line = output.lower().replace(".", "")
+                if as_status_line == "verified":
+                    status = "Verified"
+                elif as_status_line == "unsafe":
+                    status = "Unsafe"
+                elif as_status_line == "unknown":
+                    status = "Unknown"
+
                 if output:
-                    print(output.strip())  # Print each line of stdout
+                    print(output)  # Print each line of stdout
             # Once the loop exits, check if there were any errors
             stderr_output = proc.stderr.read()
             if stderr_output:
                 print("Errors:\n", stderr_output.strip())
+                status = "Error"
         except Exception as e:
             print("An error occurred:", e)
             proc.kill()
             proc.wait()
+            status = "Error"
+    if status is None:
+        status = "Unknown"
+    return status
 
 
 def kill_process_on_port(port):
@@ -89,7 +105,7 @@ def verify(config_path: str, port: int = 5000, test_mode: bool = False):
         check_ready_signal(server_process)
 
         # ------------------- run verification -------------------- #
-        run_crownreach(config_path, test_mode=test_mode, here_dir=here_dir)
+        status = run_crownreach(config_path, test_mode=test_mode, here_dir=here_dir)
 
         # ------------------- close server -------------------- #
         try:
@@ -102,6 +118,9 @@ def verify(config_path: str, port: int = 5000, test_mode: bool = False):
             server_process.wait()
 
         print("Server Closed")
+        print("=" * 100)
+        print(f"Verification Result: {status}")
+        return status
 
 
 if __name__ == "__main__":
