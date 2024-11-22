@@ -91,7 +91,7 @@ def simulate(controller, dynamics, initial_conditions: torch.Tensor, config: dic
     elif config["ode_order"] == 1:
         method = "euler"
     else:
-        warn("Unsupported ode order for simulation: {config['ode_order']}. Using RK4.")
+        warn(f"Unsupported ode order for simulation: {config['ode_order']}. Using RK4.")
         method = "rk4"
 
     if "ode_step_size" in config:
